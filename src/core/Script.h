@@ -22,10 +22,20 @@ public:
     static int setBackgroundColor(lua_State * lua);
     
     /**
-     * Load sound file.
+     * Create a thing.
      */
-    static int loadSound(lua_State * lua);
-    
+    static int create(lua_State * lua);
+        
+    /**
+     * Move a thing.
+     */
+    static int move(lua_State * lua);
+        
+    /**
+     * Destroy a thing.
+     */
+    static int destroy(lua_State * lua);
+        
 private:
 
 };

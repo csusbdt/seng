@@ -21,6 +21,9 @@ TODO
 Quick Links
 -----------
 
+- [Lua functions](http://www.lua.org/manual/5.1/index.html#index)
+- [ANGLE Project](http://code.google.com/p/angleproject/)
+- [Sample code[(http://code.google.com/p/opengles-book-samples/)
 - [OpenGL ES 2.0 Reference Pages](http://www.khronos.org/opengles/sdk/docs/man/)
 - [EGL Specification](http://www.khronos.org/registry/egl/specs/eglspec.1.4.20110406.pdf)
 - [Doxygen manual](file:///C:/Program%20Files/doxygen/html/markdown.html).

@@ -1,18 +1,13 @@
 #include "stdafx.h"
 #include "Graphics.h"
 #include "Platform.h"
-#include "Shader.h"
 #include "Util.h"
-#include "Texture.h"
-#include "Matrix.h"
+#include "Thing.h"
 
 float Graphics::backgroundColorRed = 0;
 float Graphics::backgroundColorGreen = 1;
 float Graphics::backgroundColorBlue = 0;
 float Graphics::backgroundColorAlpha = 1;
-Shader Graphics::guiShader;
-std::map<std::string, Texture *> Graphics::loadedTextures;
-std::vector<Matrix *> Graphics::unusedMatrices;
 
 EGLint Graphics::frameBufferAttributes[] = { 
     EGL_RED_SIZE, 4,
@@ -27,6 +22,7 @@ EGLint Graphics::numFrameBufferConfigurations = 0;
 EGLDisplay Graphics::eglDisplay = EGL_NO_DISPLAY;
 EGLSurface Graphics::eglSurface = EGL_NO_SURFACE;
 EGLContext Graphics::eglContext = EGL_NO_CONTEXT;
+GLuint Graphics::programObject = 0;
 
 void Graphics::checkEglError(const std::string & msg)
 {
@@ -82,6 +78,69 @@ void Graphics::init()
     }
 
     createContext();
+
+    // Load shaders.
+
+    const char * vertexCode = 
+        "attribute vec4 vPosition;    \n"
+        "void main()                  \n"
+        "{                            \n"
+        "   gl_Position = vPosition;  \n"
+        "}                            \n";
+
+    const char * fragmentCode =
+        "precision mediump float;                      \n"
+        "void main()                                   \n"
+        "{                                             \n"
+        "  gl_FragColor = vec4 ( 1.0, 0.0, 0.0, 1.0 ); \n"
+        "}                                             \n";
+
+    GLuint vertexShader;
+    GLuint fragmentShader;
+
+    vertexShader = loadShader(GL_VERTEX_SHADER, vertexCode);
+    fragmentShader = loadShader(GL_FRAGMENT_SHADER, fragmentCode);
+
+    programObject = glCreateProgram();
+    checkEglError("glCreateProgram");
+    if (programObject == 0)
+    {
+        Platform::fatalError("glCreateProgram returned 0.");
+        return;
+    }
+
+    glAttachShader(programObject, vertexShader);
+    checkEglError("glAttachShader");
+    glAttachShader(programObject, fragmentShader);
+    checkEglError("glAttachShader 2");
+
+    glBindAttribLocation(programObject, 0, "vPosition");
+    checkEglError("glBindAttribLocation");
+    glLinkProgram(programObject);
+    checkEglError("glLinkProgram");
+
+    GLint linked;
+    glGetProgramiv(programObject, GL_LINK_STATUS, &linked);
+    checkEglError("glGetProgramiv");
+    if (!linked) 
+    {
+        GLint infoLen = 0;
+        glGetProgramiv(programObject, GL_INFO_LOG_LENGTH, &infoLen);
+        checkEglError("glGetProgramiv");
+        if (infoLen > 1)
+        {
+            char * infoLog = (char *) malloc (sizeof(char) * infoLen );
+            glGetProgramInfoLog(programObject, infoLen, NULL, infoLog);
+            checkEglError("glGetProgramiv");
+            std::stringstream ss;
+            ss << "Shader link error: \n\n" << infoLog;
+            Platform::fatalError(ss.str()); 
+            free(infoLog);
+        }
+        glDeleteProgram(programObject);
+        checkEglError("glDeleteProgram");
+        return;
+    } 
 }
 
 /**
@@ -138,6 +197,49 @@ void Graphics::shutdown()
     eglTerminate(eglDisplay);
 }
 
+GLuint Graphics::loadShader(GLenum shaderType, const char * shaderCode)
+{
+   GLuint shader = glCreateShader(shaderType);
+   checkGlError("glCreateShader");
+   if (shader == 0)
+   {
+       Platform::fatalError("glCreateShader() returned 0.");
+       return 0;
+   }
+
+   glShaderSource(shader, 1, &shaderCode, NULL);
+   checkGlError("glShaderSource");
+   
+   glCompileShader(shader);
+   checkGlError("glCompileShader");
+
+   // Check the compile status.
+   GLint compiled;
+   glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+   checkGlError("glGetShaderiv");
+
+   if (!compiled) 
+   {
+      GLint infoLen = 0;
+      glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &infoLen);      
+      checkGlError("glGetShaderiv");
+      if (infoLen > 1)
+      {
+         char * infoLog = (char *) malloc(sizeof(char) * infoLen);
+         glGetShaderInfoLog (shader, infoLen, NULL, infoLog);
+         std::stringstream ss;
+         ss << "Shader comilation error:\n\n" << infoLog;
+         Platform::fatalError(ss.str());
+         free(infoLog);
+      }
+      glDeleteShader(shader);
+      checkGlError("glDeleteShader");
+      return 0;
+   }
+
+   return shader;
+}
+
 /**
  * Render next frame of animation.
  * \todo this function is an incomplete copy of geng version
@@ -145,10 +247,15 @@ void Graphics::shutdown()
 void Graphics::renderNextFrame()
 {
 	glClearColor(backgroundColorRed, backgroundColorGreen, backgroundColorBlue, backgroundColorAlpha);
-    checkOpenglError("Graphics::renderNextFrame glClearColor Failed.");
+    checkGlError("Graphics::renderNextFrame glClearColor Failed.");
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    checkOpenglError("Graphics::renderNextFrame glClear Failed.");
+    checkGlError("Graphics::renderNextFrame glClear Failed.");
+
+    glViewport(0, 0, Platform::screenWidth, Platform::screenHeight);
+    checkGlError("glViewport");
+   
+    Thing::drawAll();
 
     if (EGL_FALSE == eglSwapBuffers(eglDisplay, eglSurface))
     {
@@ -165,7 +272,7 @@ void Graphics::renderNextFrame()
     }
 }
 
-void Graphics::checkOpenglError(const std::string & msg)
+void Graphics::checkGlError(const std::string & msg)
 {
 	GLenum errorCode = glGetError();
 	if (errorCode != GL_NO_ERROR)
@@ -175,177 +282,4 @@ void Graphics::checkOpenglError(const std::string & msg)
 		ss << msg << std::endl << std::endl;
 		Platform::fatalError(ss.str());
 	}
-}
-
-/*
-Texture * Graphics::loadTexture(const std::string & textureFilename)
-{
-    // If the texture is already loaded, then return point to it's texture object.
-    if (loadedTextures.count(textureFilename) > 0)
-    {
-        return loadedTextures[textureFilename];
-    }
-
-    int numberOfFilenameCharacters = textureFilename.size() - 6;
-	if (numberOfFilenameCharacters <= 0 || textureFilename.compare(numberOfFilenameCharacters, 6, ".image") != 0)
-	{
-		std::string msg = "Graphics::loadTexture failed.\n\n";
-		msg += "Reason: Incorrect filename extension.\n\n";
-		msg += "The correct extension is .image.\n\n";
-		msg += "File: ";
-		msg += textureFilename;
-		Platform::fatalError(msg);
-	}
-
-	if (!Util::fileExists(textureFilename))
-	{
-		std::string msg = "Graphics::loadTexture failed.\n\n";
-		msg += "Reason: File doesn't exist.\n\nFile: ";
-		msg += textureFilename;
-		Platform::fatalError(msg);
-	}
-
-    std::ifstream textureFile;
-	textureFile.open(textureFilename.c_str(), std::ios::in | std::ios::binary);
-	if (!textureFile.is_open())
-    {
-		std::string msg = "Graphics::loadTexture failed.\n\n";
-		msg += "Reason: can not open file for reading.\n\nFile: ";
-		msg += textureFilename;
-		Platform::fatalError(msg);
-	}
-
-	unsigned char * bytes = NULL;
-	unsigned int width = 0;
-	unsigned int height = 0;
-	unsigned int paddedWidth = 0;
-	unsigned int paddedHeight = 0;
-
-	textureFile.read(reinterpret_cast<char *>(&width), sizeof(width));
-	textureFile.read(reinterpret_cast<char *>(&height), sizeof(height));
-	textureFile.read(reinterpret_cast<char *>(&paddedWidth), sizeof(paddedWidth));
-	textureFile.read(reinterpret_cast<char *>(&paddedHeight), sizeof(paddedHeight));
-
-	// for padding
-	unsigned int rowPadding = paddedWidth - width;
-	unsigned int numberOfBytesPerPaddedRow = paddedWidth * 4;
-	unsigned int rowPaddingBytes = rowPadding * 4;
-	
-	unsigned int numberOfPixels = paddedWidth * paddedHeight;
-    unsigned long numberOfBytes = numberOfPixels * 4;
-	bytes = new unsigned char[numberOfBytes];
-	
-	unsigned int byteIndex = 0;
-	for (unsigned int row = 0; row < height; ++row)
-	{
-		for (unsigned int col = 0; col < width; ++col)
-		{
-			// Read the 4 color components for the current pixel.
-			bytes[byteIndex + 2] = textureFile.get();
-			bytes[byteIndex + 1] = textureFile.get();
-			bytes[byteIndex + 0] = textureFile.get();
-			bytes[byteIndex + 3] = textureFile.get();
-			byteIndex += 4;
-		}
-		byteIndex += rowPaddingBytes;
-	}
-	
-    if (textureFile.fail())
-    {
-		std::string msg = "Graphics::loadTexture failed.\n\n";
-		msg += "Reason: input stream failed when reading.\n\nFile: ";
-		msg += textureFilename;
-		Platform::fatalError(msg);
-	}
-
-	textureFile.close();
-
-    Texture * texture = new Texture();
-	texture->load(bytes, width, height, paddedWidth, paddedHeight);
-	texture->activate();
-	delete [] bytes;  // \todo Look at streaming bytes into GPU memory instead of reading entire block into CPU memory
-
-    loadedTextures[textureFilename] = texture;
-    return texture;
-}
-*/
-
-/**
- * \brief Create a matrix.
- *
- * This class recycles matrices; if there is an unused matrix that
- * was previously created and destroyed, then return that one.
- *
- * \returns An unused matrix.
- */
-Matrix * Graphics::createIdentityMatrix()
-{
-    if (!unusedMatrices.empty())
-    {
-        Matrix * matrix = unusedMatrices.back();
-        unusedMatrices.pop_back();
-        matrix->makeIdentity();
-        return matrix;
-    }
-	return new Matrix();
-}
-
-void Graphics::destroyMatrix(Matrix * matrix)
-{
-    unusedMatrices.push_back(matrix);
-}
-
-//IndexBuffer * Graphics::createIndexBuffer(unsigned short * indices, unsigned int numberOfIndices)
-//{
-//}
-//
-//VertexBuffer * Graphics::createGuiVertexBuffer(unsigned int maxNumberOfVertices)
-//{
-//}
-//
-//VertexBuffer * Graphics::createGuiVertexBuffer(GuiVertex * vertices, unsigned int numberOfVertices)
-//{
-//}
-
-void Graphics::setSceneRenderState()  
-{
-    /*
-	glEnable(GL_DEPTH_TEST);
-    checkOpenglError("GraphicsGl::setGuiRenderState glDisable Failed.");	    
-
-    glDisable(GL_ALPHA_TEST);
-    checkOpenglError("GraphicsGl::setGuiRenderState glEnable Failed.");	    
-
-    glDisable(GL_BLEND);
-    checkOpenglError("GraphicsGl::setGuiRenderState glEnable Failed.");	    
-    */
-}
-
-void Graphics::setGuiRenderState()  
-{
-    /*
-    // Turn off z-buffering.
-    glDisable(GL_DEPTH_TEST);
-    checkOpenglError("GraphicsGl::setGuiRenderState glDisable Failed.");	    
-
-    // Enable alpha blending.  
-    glEnable(GL_ALPHA_TEST);
-    checkOpenglError("GraphicsGl::setGuiRenderState glEnable Failed.");	    
-
-    glEnable(GL_BLEND);
-    checkOpenglError("GraphicsGl::setGuiRenderState glEnable Failed.");	    
-
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    checkOpenglError("GraphicsGl::setGuiRenderState glBlendFunc Failed.");	    
-
-    glCullFace(GL_BACK);      
-    checkOpenglError("GraphicsGl::setGuiRenderState glCullFace Failed.");	    
-
-	glEnable(GL_TEXTURE_2D);	
-    checkOpenglError("GraphicsGl::setGuiRenderState glEnable Failed.");	    
-
-    // Stencil buffer is not used in the gui.
-	glDisable(GL_STENCIL_TEST); 
-    checkOpenglError("GraphicsGl::setGuiRenderState glDisable Failed.");	    
-    */
 }

@@ -30,16 +30,10 @@
     <ClInclude Include="..\..\..\src\core\Util.h">
       <Filter>core</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\src\core\Matrix.h">
-      <Filter>core</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\core\Shader.h">
-      <Filter>core</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\..\src\core\Sound.h">
-      <Filter>core</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\..\src\core\Platform.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\src\core\Thing.h">
       <Filter>core</Filter>
     </ClInclude>
   </ItemGroup>
@@ -65,13 +59,7 @@
     <ClCompile Include="..\..\..\src\core\Util.cpp">
       <Filter>core</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\src\core\Matrix.cpp">
-      <Filter>core</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\core\Shader.cpp">
-      <Filter>core</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\src\core\Sound.cpp">
+    <ClCompile Include="..\..\..\src\core\Thing.cpp">
       <Filter>core</Filter>
     </ClCompile>
   </ItemGroup>

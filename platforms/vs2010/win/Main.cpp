@@ -2,7 +2,6 @@
 
 #include "Main.h"
 #include "Platform.h"
-#include "Opengl.h"
 #include "Graphics.h"
 
 /**
