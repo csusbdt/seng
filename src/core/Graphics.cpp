@@ -14,6 +14,31 @@ Shader Graphics::guiShader;
 std::map<std::string, Texture *> Graphics::loadedTextures;
 std::vector<Matrix *> Graphics::unusedMatrices;
 
+EGLint Graphics::frameBufferAttributes[] = { 
+    EGL_RED_SIZE, 4,
+    EGL_GREEN_SIZE, 4,
+    EGL_BLUE_SIZE, 4,
+    EGL_ALPHA_SIZE, 0,
+    EGL_DEPTH_SIZE, 8,
+    EGL_NONE 
+};
+EGLConfig Graphics::frameBufferConfiguration;
+EGLint Graphics::numFrameBufferConfigurations = 0;
+EGLDisplay Graphics::eglDisplay = EGL_NO_DISPLAY;
+EGLSurface Graphics::eglSurface = EGL_NO_SURFACE;
+EGLContext Graphics::eglContext = EGL_NO_CONTEXT;
+
+void Graphics::checkEglError(const std::string & msg)
+{
+    EGLint error = eglGetError();
+    if (error != EGL_SUCCESS)
+    {
+        std::stringstream ss;
+        ss << msg << "\nEGL error code: " << error << std::endl;
+        Platform::fatalError(ss.str());
+    }
+}
+
 /**
  * Load shaders.
  *
@@ -21,7 +46,96 @@ std::vector<Matrix *> Graphics::unusedMatrices;
  */
 void Graphics::init()
 {
-    guiShader.load("shaders/gui");
+    // Get the display handle.
+    eglDisplay = Platform::getEglDisplay();
+    if (eglDisplay == EGL_NO_DISPLAY)
+    {
+        Platform::fatalError("No EGL Display.");
+    }
+
+    // Check OpenGL ES version.    
+    EGLint major;
+    EGLint minor;
+    eglInitialize(eglDisplay, &major, &minor);
+    checkEglError("eglInitialize");
+    if (major == 1 && minor < 4)
+    {
+        Platform::fatalError("EGL version 1.4 or later required.");
+        return;
+    }
+
+    memset(&frameBufferConfiguration, 0, sizeof(EGLConfig));  // Not sure this is needed.
+    eglChooseConfig(eglDisplay, frameBufferAttributes, &frameBufferConfiguration, 1, &numFrameBufferConfigurations);
+    checkEglError("Call to eglChooseConfig failed.");
+    if (numFrameBufferConfigurations == 0)
+    {
+        Platform::fatalError("No EGL frame buffer configurations that match the specified requirements.");
+    }
+
+    // Create a window surface.
+    EGLint surfaceAttributes[] = { EGL_RENDER_BUFFER, EGL_BACK_BUFFER, EGL_NONE, EGL_NONE };
+    eglSurface = eglCreateWindowSurface(eglDisplay, frameBufferConfiguration, Platform::eglNativeWindowType, surfaceAttributes);
+    checkEglError("eglCreateWindowSurface");
+    if (eglSurface == EGL_NO_SURFACE)
+    {
+        Platform::fatalError("Call to eglCreateWindowSurface failed.");
+    }
+
+    createContext();
+}
+
+/**
+ * \brief Create a new context and make it current.
+ *
+ * This function is called at program start up and after power events.
+ */
+void Graphics::createContext()
+{  
+    assert(eglContext == EGL_NO_CONTEXT);
+    EGLint contextAttributes[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE, EGL_NONE };
+    eglContext = eglCreateContext(eglDisplay, frameBufferConfiguration, EGL_NO_CONTEXT, contextAttributes);
+    checkEglError("eglCreateContext");
+    if (eglContext == EGL_NO_CONTEXT)
+    {   
+        Platform::fatalError("eglCreateContext returned EGL_NO_CONTEXT");
+    }
+    eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext);
+    checkEglError("eglMakeCurrent");
+}
+
+/**
+ * \brief Destroy the context.
+ *
+ * This function is called after power events and at shutdown.
+ */
+void Graphics::destroyContext()
+{
+    assert(eglContext != EGL_NO_CONTEXT);
+
+    // Make sure the context is not current.
+    if (eglMakeCurrent(eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT) == EGL_FALSE)
+    {
+        EGLint error = eglGetError();
+        if (error == EGL_CONTEXT_LOST)
+        {
+            Platform::displayMessage("Power event when trying to initialize.  I don't know how to handle this.");
+            return;
+        }
+        Platform::fatalError("eglMakeCurrent failed in Graphics::initializeOpenglState.  Maybe this is normal when power events occur.");
+        return;
+    }
+
+    // Destroy the context.
+    eglDestroyContext(eglDisplay, eglContext);
+    checkEglError("eglDestroyContext");
+    eglContext = EGL_NO_CONTEXT;
+}
+
+void Graphics::shutdown()
+{
+    destroyContext();
+    eglDestroySurface(eglDisplay, eglSurface);
+    eglTerminate(eglDisplay);
 }
 
 /**
@@ -30,34 +144,39 @@ void Graphics::init()
  */
 void Graphics::renderNextFrame()
 {
-    /// Clear depth and screen buffers.
 	glClearColor(backgroundColorRed, backgroundColorGreen, backgroundColorBlue, backgroundColorAlpha);
-    checkOpenglError("GraphicsGl::clearDepthAndScreenBuffers glClearColor Failed.");
+    checkOpenglError("Graphics::renderNextFrame glClearColor Failed.");
 
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    checkOpenglError("GraphicsGl::clearDepthAndScreenBuffers glClear Failed.");
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    checkOpenglError("Graphics::renderNextFrame glClear Failed.");
 
-    setSceneRenderState();
-    // \todo Call Scene::render(false).
-
-    setGuiRenderState();
-    //Gui::render(false);
-
-    Platform::swapBuffers();
+    if (EGL_FALSE == eglSwapBuffers(eglDisplay, eglSurface))
+    {
+        // eglSwapBuffers will fail after a power event.
+        // In this case, we need to reinitialize.
+        EGLint error = eglGetError();	
+        if (error == EGL_CONTEXT_LOST)
+        {
+            // Power event; need to "... destroy all contexts and reinitialise OpenGL ES state 
+            // and objects to continue rendering." 
+            destroyContext();
+            createContext();
+        }
+    }
 }
 
 void Graphics::checkOpenglError(const std::string & msg)
 {
-	GLenum errorCode;
-	if ((errorCode = glGetError()) != GL_NO_ERROR)
+	GLenum errorCode = glGetError();
+	if (errorCode != GL_NO_ERROR)
 	{
-		std::stringstream errorMessage;
-		errorMessage << "opengl error" << std::endl << std::endl;
-		errorMessage << errorCode  << "   " << gluErrorString(errorCode)  << std::endl << std::endl;
-		errorMessage << msg << std::endl << std::endl;
-		Platform::fatalError(errorMessage.str());
+		std::stringstream ss;
+		ss << "OpenGL ES error: " << errorCode << std::endl << std::endl;
+		ss << msg << std::endl << std::endl;
+		Platform::fatalError(ss.str());
 	}
 }
+
 /*
 Texture * Graphics::loadTexture(const std::string & textureFilename)
 {
@@ -190,6 +309,7 @@ void Graphics::destroyMatrix(Matrix * matrix)
 
 void Graphics::setSceneRenderState()  
 {
+    /*
 	glEnable(GL_DEPTH_TEST);
     checkOpenglError("GraphicsGl::setGuiRenderState glDisable Failed.");	    
 
@@ -198,10 +318,12 @@ void Graphics::setSceneRenderState()
 
     glDisable(GL_BLEND);
     checkOpenglError("GraphicsGl::setGuiRenderState glEnable Failed.");	    
+    */
 }
 
 void Graphics::setGuiRenderState()  
 {
+    /*
     // Turn off z-buffering.
     glDisable(GL_DEPTH_TEST);
     checkOpenglError("GraphicsGl::setGuiRenderState glDisable Failed.");	    
@@ -225,4 +347,5 @@ void Graphics::setGuiRenderState()
     // Stencil buffer is not used in the gui.
 	glDisable(GL_STENCIL_TEST); 
     checkOpenglError("GraphicsGl::setGuiRenderState glDisable Failed.");	    
+    */
 }

@@ -86,6 +86,7 @@ void Core::shutdown()
         lua_close(lua);
         lua = NULL;
     }
+    Graphics::shutdown();
 }
 
 void Core::doFile(const char * filename) 

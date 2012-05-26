@@ -2,6 +2,8 @@
 
 #include "Main.h"
 #include "Platform.h"
+#include "Opengl.h"
+#include "Graphics.h"
 
 /**
  * \brief Entry point. 
@@ -25,42 +27,6 @@ int _tmain(int argc, _TCHAR* argv[])
     return Main::main(argc, argv);
 }
 
-// OpenGl functions not provided by Visual Studio.
-
-// Vertex buffer object (VBO) functions
-PFNGLGENBUFFERSARBPROC glGenBuffersARB = NULL;					// VBO Name Generation Procedure
-PFNGLBINDBUFFERARBPROC glBindBufferARB = NULL;					// VBO Bind Procedure
-PFNGLBUFFERDATAARBPROC glBufferDataARB = NULL;					// VBO Data Loading Procedure
-PFNGLDELETEBUFFERSARBPROC glDeleteBuffersARB = NULL;			// VBO Deletion Procedure
-PFNGLBUFFERSUBDATAARBPROC glBufferSubDataARB = NULL;
-PFNGLCLIENTACTIVETEXTUREARBPROC glClientActiveTextureARB = NULL;
-
-// Shader functions
-PFNGLCREATEPROGRAMPROC glCreateProgram = NULL;
-PFNGLGETSHADERIVPROC glGetShaderiv = NULL;
-PFNGLCREATESHADERPROC glCreateShader = NULL;
-PFNGLSHADERSOURCEPROC glShaderSource = NULL;
-PFNGLCOMPILESHADERPROC glCompileShader = NULL;
-PFNGLATTACHSHADERPROC glAttachShader = NULL;
-PFNGLLINKPROGRAMPROC glLinkProgram = NULL;
-PFNGLGETPROGRAMIVPROC glGetProgramiv = NULL;
-PFNGLUSEPROGRAMPROC glUseProgram = NULL;
-PFNGLDELETESHADERPROC glDeleteShader = NULL;
-PFNGLDELETEPROGRAMPROC glDeleteProgram = NULL;
-PFNGLGETUNIFORMLOCATIONPROC glGetUniformLocation = NULL;
-PFNGLGETUNIFORMLOCATIONARBPROC glGetUniformLocationARB = NULL;
-PFNGLUNIFORMMATRIX2FVARBPROC glUniformMatrix4fvARB = NULL;
-PFNGLGETSHADERINFOLOGPROC glGetShaderInfoLog = NULL;
-PFNGLUNIFORM1IARBPROC glUniform1iARB =NULL;
-PFNGLACTIVETEXTUREPROC glActiveTexture = NULL;
-PFNGLACTIVETEXTUREARBPROC glActiveTextureARB = NULL;
-PFNGLVERTEXATTRIBPOINTERPROC glVertexAttribPointer = NULL;
-PFNGLGETATTRIBLOCATIONPROC glGetAttribLocation = NULL;
-PFNGLENABLEVERTEXATTRIBARRAYPROC glEnableVertexAttribArray = NULL;
-PFNGLCREATESHADEROBJECTARBPROC glCreateShaderObjectARB = NULL;
-PFNGLUNIFORM4FPROC glUniform4f = NULL;
-PFNGLUNIFORM1IPROC glUniform1i = NULL;
-
 //..............................................................................
 //
 // Main class definitions
@@ -73,6 +39,7 @@ LARGE_INTEGER Main::startTime;
 double Main::timeCounterFrequency = 0;
 HDC Main::deviceContext;
 HGLRC Main::renderContext;
+bool Main::waitForConsoleToClose = false;
 
 int Main::main(int argc, _TCHAR* argv[])
 {
@@ -84,22 +51,6 @@ int Main::main(int argc, _TCHAR* argv[])
     timeCounterFrequency = static_cast<double>(frequency.QuadPart);
     assert(timeCounterFrequency > 0);
     QueryPerformanceCounter(&startTime);
-
-    /// Declare this process to be high DPI aware, and prevent automatic scaling.
-    /// Warning: This is better done as a `<dpiaware>` manifest element to avoid
-    ///          problems based on code that has run before this point. 
-    /// \todo Create a dpiaware manifest element.
-    HINSTANCE hUser32 = LoadLibrary(L"user32.dll");
-    if (hUser32)
-    {
-        typedef BOOL (WINAPI* LPSetProcessDPIAware)( void );
-        LPSetProcessDPIAware pSetProcessDPIAware = (LPSetProcessDPIAware) GetProcAddress(hUser32, "SetProcessDPIAware");
-        if (pSetProcessDPIAware)
-        {
-            pSetProcessDPIAware();
-        }
-        FreeLibrary(hUser32);
-    }
 
     /// Register a window class. 
     /// \todo Configure small and large application icons.
@@ -181,8 +132,9 @@ int Main::main(int argc, _TCHAR* argv[])
     ShowWindow(consoleWindowHandle, SW_HIDE);
 #endif
 
-    /// Intialize core.
-    initOpengl();
+    deviceContext = GetDC(applicationWindowHandle);
+    Platform::eglNativeWindowType = (EGLNativeWindowType) applicationWindowHandle;
+
     Core::init();
 
     /// Enter message loop.
@@ -200,10 +152,13 @@ int Main::main(int argc, _TCHAR* argv[])
         Core::onMessageQueueEmpty(totalElapsedSeconds);
     }
     Core::shutdown();
-    wglMakeCurrent(0, 0);
-	wglDeleteContext(Main::renderContext);
-	ReleaseDC(Main::applicationWindowHandle, Main::deviceContext);
 
+    while (waitForConsoleToClose)
+    {
+        // Wait until user presses enter in console window.
+    }
+
+	ReleaseDC(Main::applicationWindowHandle, Main::deviceContext);
 	return 0;
 }
 
@@ -223,6 +178,14 @@ DWORD WINAPI Main::consoleThread(LPVOID lpParam)
             Sleep(0);
         }
     }
+
+    if (waitForConsoleToClose)
+    {
+        std::cout << "Press enter to terminate." << std::endl;
+        std::cin.get();
+        waitForConsoleToClose = false;
+    }
+
     return 0;
 }
 
@@ -286,11 +249,13 @@ void Main::ErrorExit(LPTSTR lpszFunction)
  */
 void Main::initOpengl()
 {
-	PIXELFORMATDESCRIPTOR pfd;
-	int format;
+//	PIXELFORMATDESCRIPTOR pfd;
+//	int format;
 	
-	deviceContext = GetDC(applicationWindowHandle);
+//	deviceContext = GetDC(applicationWindowHandle);
 	
+
+/*
 	// set the pixel format for the DC
 	ZeroMemory(&pfd, sizeof(pfd));
 	pfd.nSize = sizeof(pfd);
@@ -304,40 +269,18 @@ void Main::initOpengl()
 	SetPixelFormat(deviceContext, format, &pfd);
 	
 	renderContext = wglCreateContext(deviceContext);
-	wglMakeCurrent(deviceContext, renderContext); /// \todo Determine if we can make renderContext local to init() 
+	wglMakeCurrent(deviceContext, renderContext); /// \todo Determine if we can make renderContext local to init()
 
-    /// Intialize the gl procedures.
+    const GLubyte * openglVersion = glGetString(GL_VERSION);
+    Graphics::checkOpenglError("Main::initOpengl glGetString Failed.");
 
-	// VBO functions
-	glGenBuffersARB = (PFNGLGENBUFFERSARBPROC) wglGetProcAddress("glGenBuffersARB");
-	glBindBufferARB = (PFNGLBINDBUFFERARBPROC) wglGetProcAddress("glBindBufferARB");
-	glBufferDataARB = (PFNGLBUFFERDATAARBPROC) wglGetProcAddress("glBufferDataARB");
-	glDeleteBuffersARB = (PFNGLDELETEBUFFERSARBPROC) wglGetProcAddress ("glDeleteBuffersARB");
-	glClientActiveTextureARB = (PFNGLCLIENTACTIVETEXTUREARBPROC) wglGetProcAddress ("glClientActiveTextureARB");	
-	glBufferSubDataARB = (PFNGLBUFFERSUBDATAARBPROC) wglGetProcAddress("glBufferSubDataARB"); 
+    const GLubyte * openglExtensions = glGetString(GL_EXTENSIONS);
+    Graphics::checkOpenglError("Main::initOpengl glGetString Failed.");
 
-	// Shader functions
-	glCreateProgram = (PFNGLCREATEPROGRAMPROC) wglGetProcAddress("glCreateProgram");
-    glGetShaderiv = (PFNGLGETSHADERIVPROC) wglGetProcAddress("glGetShaderiv");
-    glCreateShader = (PFNGLCREATESHADERPROC) wglGetProcAddress("glCreateShader");
-    glShaderSource = (PFNGLSHADERSOURCEPROC) wglGetProcAddress("glShaderSource");
-    glCompileShader = (PFNGLCOMPILESHADERPROC) wglGetProcAddress("glCompileShader");
-    glAttachShader = (PFNGLATTACHSHADERPROC) wglGetProcAddress("glAttachShader");
-    glLinkProgram = (PFNGLLINKPROGRAMPROC) wglGetProcAddress("glLinkProgram");
-    glGetProgramiv = (PFNGLGETPROGRAMIVPROC) wglGetProcAddress("glGetProgramiv");
-    glUseProgram = (PFNGLUSEPROGRAMPROC) wglGetProcAddress("glUseProgram");
-    glDeleteShader = (PFNGLDELETESHADERPROC) wglGetProcAddress("glDeleteShader");
-    glDeleteProgram = (PFNGLDELETEPROGRAMPROC) wglGetProcAddress("glDeleteProgram");
-	glGetUniformLocation = (PFNGLGETATTRIBLOCATIONPROC) wglGetProcAddress("glGetUniformLocation");
-	glGetUniformLocationARB = (PFNGLGETUNIFORMLOCATIONARBPROC) wglGetProcAddress("glGetUniformLocationARB");
-	glUniformMatrix4fvARB = (PFNGLUNIFORMMATRIX4FVARBPROC) wglGetProcAddress("glUniformMatrix4fvARB");
-	glGetShaderInfoLog = (PFNGLGETSHADERINFOLOGPROC) wglGetProcAddress("glGetShaderInfoLog");
-	glUniform1iARB = (PFNGLUNIFORM1IARBPROC) wglGetProcAddress("glUniform1iARB");
-	glActiveTextureARB =(PFNGLACTIVETEXTUREARBPROC)  wglGetProcAddress("glActiveTextureARB");
-	glVertexAttribPointer =(PFNGLVERTEXATTRIBPOINTERPROC)  wglGetProcAddress("glVertexAttribPointer");
-	glGetAttribLocation =(PFNGLGETATTRIBLOCATIONPROC)  wglGetProcAddress("glGetAttribLocation");
-	glEnableVertexAttribArray =(PFNGLENABLEVERTEXATTRIBARRAYPROC)  wglGetProcAddress("glEnableVertexAttribArray");
-	glCreateShaderObjectARB =(PFNGLCREATESHADEROBJECTARBPROC)  wglGetProcAddress("glCreateShaderObjectARB");
-	glUniform4f =(PFNGLUNIFORM4FPROC)  wglGetProcAddress("glUniform4f");
-	glUniform1i =(PFNGLUNIFORM1IPROC)  wglGetProcAddress("glUniform1i");
+    if (strstr((const char *)openglExtensions, "GL_ARB_ES2_compatibility") == NULL)
+    {
+        Platform::fatalError("Your OpenGL driver does not support GL_ARB_ES2_compatibility");
+    }
+*/
+//    Opengl::init();
 }

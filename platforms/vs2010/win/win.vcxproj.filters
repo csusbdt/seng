@@ -15,12 +15,6 @@
     <ClInclude Include="..\..\..\src\core\Script.h">
       <Filter>core</Filter>
     </ClInclude>
-    <ClInclude Include="glext.h">
-      <Filter>main</Filter>
-    </ClInclude>
-    <ClInclude Include="wglext.h">
-      <Filter>main</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\..\src\core\Graphics.h">
       <Filter>core</Filter>
     </ClInclude>

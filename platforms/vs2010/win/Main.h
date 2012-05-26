@@ -14,6 +14,8 @@ public:
      */
     static int main(int argc, _TCHAR* argv[]);
 
+    static bool waitForConsoleToClose;
+
 private:
     /**
      * The application's graphical window handle.

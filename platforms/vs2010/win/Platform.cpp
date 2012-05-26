@@ -5,29 +5,23 @@
 unsigned int Platform::screenWidth = 300;
 unsigned int Platform::screenHeight = 300;
 
-void Platform::swapBuffers()
-{
-    SwapBuffers(Main::deviceContext);
-}
-
-void Platform::displayMessage(const std::wstring & msg)
-{
-    MessageBoxW(0, msg.c_str(), L"Message", MB_OK);
-}
+EGLNativeWindowType Platform::eglNativeWindowType = 0;
 
 void Platform::displayMessage(const std::string & msg)
 {
-    MessageBoxA(0, msg.c_str(), "Message", MB_OK);
-}
-
-void Platform::fatalError(const std::wstring & msg)
-{
-    displayMessage(msg);
-    exit(1);
+    std::cout << msg << std::endl;
 }
 
 void Platform::fatalError(const std::string & msg)
 {
+#ifdef _DEBUG
+    Main::waitForConsoleToClose = true;
+#endif
     displayMessage(msg);
-    exit(1);
+    Core::run = false;
+}
+
+EGLDisplay Platform::getEglDisplay()
+{
+    return eglGetDisplay(Main::deviceContext);
 }

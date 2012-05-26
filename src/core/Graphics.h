@@ -29,6 +29,7 @@ public:
      *
      */
     static void init(); 
+    static void shutdown(); 
     static void renderNextFrame();
     static void checkOpenglError(const std::string & msg);
 
@@ -48,9 +49,21 @@ public:
 //	static VertexBuffer * createGuiVertexBuffer(GuiVertex * vertices, unsigned int numberOfVertices);
 
 private:
+    static EGLint frameBufferAttributes[];
+    static EGLConfig frameBufferConfiguration;
+    static EGLint numFrameBufferConfigurations;
+
+    static EGLDisplay eglDisplay;
+    static EGLSurface eglSurface;
+    static EGLContext eglContext;
+
     static Shader guiShader;
     static std::map<std::string, Texture *> loadedTextures;
     static std::vector<Matrix *> unusedMatrices;
+
+    static void checkEglError(const std::string & msg);
+    static void createContext();
+    static void destroyContext();
 
     static void setSceneRenderState();
     static void setGuiRenderState();
