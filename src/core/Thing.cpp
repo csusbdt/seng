@@ -52,9 +52,9 @@ void Thing::destroy(const std::string & name)
 
 void Thing::draw() const
 {
-    GLfloat vVertices[] = { x +  0.0f, y +  0.5f, z + 0.0f, 
-                            x + -0.5f, y + -0.5f, z + 0.0f,
-                            x +  0.5f, y + -0.5f, z + 0.0f };
+    GLfloat vVertices[] = { (GLfloat)x +  0.0f, (GLfloat)y +  0.5f, (GLfloat)z + 0.0f, 
+                            (GLfloat)x + -0.5f, (GLfloat)y + -0.5f, (GLfloat)z + 0.0f,
+                            (GLfloat)x +  0.5f, (GLfloat)y + -0.5f, (GLfloat)z + 0.0f };
 
     glUseProgram(Graphics::programObject);
     Graphics::checkGlError("glUseProgram");

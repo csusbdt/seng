@@ -22,7 +22,6 @@ private:
      */
     static HWND applicationWindowHandle;
 
-private:
     /**
      * The application's console window handle.
      */
@@ -47,6 +46,15 @@ private:
      * Not sure why we need this.
      */
     static HGLRC renderContext;
+
+
+    static EGLint frameBufferAttributes[];
+    static EGLConfig frameBufferConfiguration;
+    static EGLint numFrameBufferConfigurations;
+
+    static EGLDisplay eglDisplay;
+    static EGLSurface eglSurface;
+    static EGLContext eglContext;
 
     /**
      * \brief Thread start for console input loop.
@@ -75,10 +83,9 @@ private:
      */
     static void ErrorExit(LPTSTR lpszFunction);
 
-    /**
-     * \brief Intiialize for OpenGL.
-     */
-    static void initOpengl();
+    static void checkEglError(const std::string & msg);
+    static void createContext();
+    static void destroyContext();
 
     friend class Platform;
 };

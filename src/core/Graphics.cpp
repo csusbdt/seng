@@ -9,31 +9,7 @@ float Graphics::backgroundColorGreen = 1;
 float Graphics::backgroundColorBlue = 0;
 float Graphics::backgroundColorAlpha = 1;
 
-EGLint Graphics::frameBufferAttributes[] = { 
-    EGL_RED_SIZE, 4,
-    EGL_GREEN_SIZE, 4,
-    EGL_BLUE_SIZE, 4,
-    EGL_ALPHA_SIZE, 0,
-    EGL_DEPTH_SIZE, 8,
-    EGL_NONE 
-};
-EGLConfig Graphics::frameBufferConfiguration;
-EGLint Graphics::numFrameBufferConfigurations = 0;
-EGLDisplay Graphics::eglDisplay = EGL_NO_DISPLAY;
-EGLSurface Graphics::eglSurface = EGL_NO_SURFACE;
-EGLContext Graphics::eglContext = EGL_NO_CONTEXT;
 GLuint Graphics::programObject = 0;
-
-void Graphics::checkEglError(const std::string & msg)
-{
-    EGLint error = eglGetError();
-    if (error != EGL_SUCCESS)
-    {
-        std::stringstream ss;
-        ss << msg << "\nEGL error code: " << error << std::endl;
-        Platform::fatalError(ss.str());
-    }
-}
 
 /**
  * Load shaders.
@@ -42,43 +18,6 @@ void Graphics::checkEglError(const std::string & msg)
  */
 void Graphics::init()
 {
-    // Get the display handle.
-    eglDisplay = Platform::getEglDisplay();
-    if (eglDisplay == EGL_NO_DISPLAY)
-    {
-        Platform::fatalError("No EGL Display.");
-    }
-
-    // Check OpenGL ES version.    
-    EGLint major;
-    EGLint minor;
-    eglInitialize(eglDisplay, &major, &minor);
-    checkEglError("eglInitialize");
-    if (major == 1 && minor < 4)
-    {
-        Platform::fatalError("EGL version 1.4 or later required.");
-        return;
-    }
-
-    memset(&frameBufferConfiguration, 0, sizeof(EGLConfig));  // Not sure this is needed.
-    eglChooseConfig(eglDisplay, frameBufferAttributes, &frameBufferConfiguration, 1, &numFrameBufferConfigurations);
-    checkEglError("Call to eglChooseConfig failed.");
-    if (numFrameBufferConfigurations == 0)
-    {
-        Platform::fatalError("No EGL frame buffer configurations that match the specified requirements.");
-    }
-
-    // Create a window surface.
-    EGLint surfaceAttributes[] = { EGL_RENDER_BUFFER, EGL_BACK_BUFFER, EGL_NONE, EGL_NONE };
-    eglSurface = eglCreateWindowSurface(eglDisplay, frameBufferConfiguration, Platform::eglNativeWindowType, surfaceAttributes);
-    checkEglError("eglCreateWindowSurface");
-    if (eglSurface == EGL_NO_SURFACE)
-    {
-        Platform::fatalError("Call to eglCreateWindowSurface failed.");
-    }
-
-    createContext();
-
     // Load shaders.
 
     const char * vertexCode = 
@@ -102,7 +41,7 @@ void Graphics::init()
     fragmentShader = loadShader(GL_FRAGMENT_SHADER, fragmentCode);
 
     programObject = glCreateProgram();
-    checkEglError("glCreateProgram");
+    checkGlError("glCreateProgram");
     if (programObject == 0)
     {
         Platform::fatalError("glCreateProgram returned 0.");
@@ -110,91 +49,41 @@ void Graphics::init()
     }
 
     glAttachShader(programObject, vertexShader);
-    checkEglError("glAttachShader");
+    checkGlError("glAttachShader");
     glAttachShader(programObject, fragmentShader);
-    checkEglError("glAttachShader 2");
+    checkGlError("glAttachShader 2");
 
     glBindAttribLocation(programObject, 0, "vPosition");
-    checkEglError("glBindAttribLocation");
+    checkGlError("glBindAttribLocation");
     glLinkProgram(programObject);
-    checkEglError("glLinkProgram");
+    checkGlError("glLinkProgram");
 
     GLint linked;
     glGetProgramiv(programObject, GL_LINK_STATUS, &linked);
-    checkEglError("glGetProgramiv");
+    checkGlError("glGetProgramiv");
     if (!linked) 
     {
         GLint infoLen = 0;
         glGetProgramiv(programObject, GL_INFO_LOG_LENGTH, &infoLen);
-        checkEglError("glGetProgramiv");
+        checkGlError("glGetProgramiv");
         if (infoLen > 1)
         {
             char * infoLog = (char *) malloc (sizeof(char) * infoLen );
             glGetProgramInfoLog(programObject, infoLen, NULL, infoLog);
-            checkEglError("glGetProgramiv");
+            checkGlError("glGetProgramiv");
             std::stringstream ss;
             ss << "Shader link error: \n\n" << infoLog;
             Platform::fatalError(ss.str()); 
             free(infoLog);
         }
         glDeleteProgram(programObject);
-        checkEglError("glDeleteProgram");
+        checkGlError("glDeleteProgram");
         return;
     } 
 }
 
-/**
- * \brief Create a new context and make it current.
- *
- * This function is called at program start up and after power events.
- */
-void Graphics::createContext()
-{  
-    assert(eglContext == EGL_NO_CONTEXT);
-    EGLint contextAttributes[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE, EGL_NONE };
-    eglContext = eglCreateContext(eglDisplay, frameBufferConfiguration, EGL_NO_CONTEXT, contextAttributes);
-    checkEglError("eglCreateContext");
-    if (eglContext == EGL_NO_CONTEXT)
-    {   
-        Platform::fatalError("eglCreateContext returned EGL_NO_CONTEXT");
-    }
-    eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext);
-    checkEglError("eglMakeCurrent");
-}
-
-/**
- * \brief Destroy the context.
- *
- * This function is called after power events and at shutdown.
- */
-void Graphics::destroyContext()
-{
-    assert(eglContext != EGL_NO_CONTEXT);
-
-    // Make sure the context is not current.
-    if (eglMakeCurrent(eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT) == EGL_FALSE)
-    {
-        EGLint error = eglGetError();
-        if (error == EGL_CONTEXT_LOST)
-        {
-            Platform::displayMessage("Power event when trying to initialize.  I don't know how to handle this.");
-            return;
-        }
-        Platform::fatalError("eglMakeCurrent failed in Graphics::initializeOpenglState.  Maybe this is normal when power events occur.");
-        return;
-    }
-
-    // Destroy the context.
-    eglDestroyContext(eglDisplay, eglContext);
-    checkEglError("eglDestroyContext");
-    eglContext = EGL_NO_CONTEXT;
-}
-
 void Graphics::shutdown()
 {
-    destroyContext();
-    eglDestroySurface(eglDisplay, eglSurface);
-    eglTerminate(eglDisplay);
 }
 
 GLuint Graphics::loadShader(GLenum shaderType, const char * shaderCode)
@@ -256,20 +145,6 @@ void Graphics::renderNextFrame()
     checkGlError("glViewport");
    
     Thing::drawAll();
-
-    if (EGL_FALSE == eglSwapBuffers(eglDisplay, eglSurface))
-    {
-        // eglSwapBuffers will fail after a power event.
-        // In this case, we need to reinitialize.
-        EGLint error = eglGetError();	
-        if (error == EGL_CONTEXT_LOST)
-        {
-            // Power event; need to "... destroy all contexts and reinitialise OpenGL ES state 
-            // and objects to continue rendering." 
-            destroyContext();
-            createContext();
-        }
-    }
 }
 
 void Graphics::checkGlError(const std::string & msg)

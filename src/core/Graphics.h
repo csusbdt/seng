@@ -25,18 +25,6 @@ public:
     static void checkGlError(const std::string & msg);
 
 private:
-    static EGLint frameBufferAttributes[];
-    static EGLConfig frameBufferConfiguration;
-    static EGLint numFrameBufferConfigurations;
-
-    static EGLDisplay eglDisplay;
-    static EGLSurface eglSurface;
-    static EGLContext eglContext;
-
-    static void checkEglError(const std::string & msg);
-    static void createContext();
-    static void destroyContext();
-
     static void setSceneRenderState();
     static void setGuiRenderState();
 

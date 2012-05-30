@@ -46,6 +46,12 @@ void Core::onMessageQueueEmpty(double elapsedSeconds)
         return;
     }
 
+    if (luaChunk != NULL)
+    {
+        doString(luaChunk);
+        luaChunk = NULL;
+    }
+
     static double previousElapsedSeconds = 0;
     static double dt = 0;
 
@@ -62,18 +68,19 @@ void Core::onMessageQueueEmpty(double elapsedSeconds)
         dt = maxDt;
     }
 
-    if (luaChunk != NULL)
-    {
-        doString(luaChunk);
-        luaChunk = NULL;
-    }
-
     // \todo Update all entities with dt.
-    Graphics::renderNextFrame();
 
     // dt is an accumulator; it has just been
     // consumed, so now it should be cleared.
     dt = 0;
+}
+
+void Core::renderNextFrame()
+{
+    if (run)
+    {
+        Graphics::renderNextFrame();
+    }
 }
 
 void Core::onWindowClosing()

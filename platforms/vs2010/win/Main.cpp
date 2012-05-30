@@ -40,6 +40,22 @@ HDC Main::deviceContext;
 HGLRC Main::renderContext;
 bool Main::waitForConsoleToClose = false;
 
+EGLint Main::frameBufferAttributes[] = { 
+    EGL_RED_SIZE, 4,
+    EGL_GREEN_SIZE, 4,
+    EGL_BLUE_SIZE, 4,
+    EGL_ALPHA_SIZE, 0,
+    EGL_DEPTH_SIZE, 8,
+    EGL_NONE 
+};
+
+EGLConfig Main::frameBufferConfiguration;
+EGLint Main::numFrameBufferConfigurations = 0;
+EGLDisplay Main::eglDisplay = EGL_NO_DISPLAY;
+EGLSurface Main::eglSurface = EGL_NO_SURFACE;
+EGLContext Main::eglContext = EGL_NO_CONTEXT;
+
+
 int Main::main(int argc, _TCHAR* argv[])
 {
     consoleWindowHandle = GetConsoleWindow();
@@ -134,6 +150,43 @@ int Main::main(int argc, _TCHAR* argv[])
     deviceContext = GetDC(applicationWindowHandle);
     Platform::eglNativeWindowType = (EGLNativeWindowType) applicationWindowHandle;
 
+
+        // Get the display handle.
+    eglDisplay = Platform::getEglDisplay();
+    if (eglDisplay == EGL_NO_DISPLAY)
+    {
+        Platform::fatalError("No EGL Display.");
+    }
+
+    // Check OpenGL ES version.    
+    EGLint major;
+    EGLint minor;
+    eglInitialize(eglDisplay, &major, &minor);
+    checkEglError("eglInitialize");
+    if (major == 1 && minor < 4)
+    {
+        Platform::fatalError("EGL version 1.4 or later required.");
+    }
+
+    memset(&frameBufferConfiguration, 0, sizeof(EGLConfig));  // Not sure this is needed.
+    eglChooseConfig(eglDisplay, frameBufferAttributes, &frameBufferConfiguration, 1, &numFrameBufferConfigurations);
+    checkEglError("Call to eglChooseConfig failed.");
+    if (numFrameBufferConfigurations == 0)
+    {
+        Platform::fatalError("No EGL frame buffer configurations that match the specified requirements.");
+    }
+
+    // Create a window surface.
+    EGLint surfaceAttributes[] = { EGL_RENDER_BUFFER, EGL_BACK_BUFFER, EGL_NONE, EGL_NONE };
+    eglSurface = eglCreateWindowSurface(eglDisplay, frameBufferConfiguration, Platform::eglNativeWindowType, surfaceAttributes);
+    checkEglError("eglCreateWindowSurface");
+    if (eglSurface == EGL_NO_SURFACE)
+    {
+        Platform::fatalError("Call to eglCreateWindowSurface failed.");
+    }
+
+    createContext();
+
     Core::init();
 
     /// Enter message loop.
@@ -145,12 +198,36 @@ int Main::main(int argc, _TCHAR* argv[])
             TranslateMessage(&Msg);
             DispatchMessage(&Msg);
 	    }
+
+        // Core has not yet drawn requested frame.
         LARGE_INTEGER currentTime;
         QueryPerformanceCounter(&currentTime);
         double totalElapsedSeconds = static_cast<double>(currentTime.QuadPart - startTime.QuadPart) / timeCounterFrequency;
         Core::onMessageQueueEmpty(totalElapsedSeconds);
+
+        Core::renderNextFrame();
+
+        // Core has drawn a frame, so let's render it.
+        if (EGL_FALSE == eglSwapBuffers(eglDisplay, eglSurface))
+        {
+            // eglSwapBuffers will fail after a power event.
+            // In this case, we need to reinitialize.
+            EGLint error = eglGetError();	
+            if (error == EGL_CONTEXT_LOST)
+            {
+                // Power event; need to "... destroy all contexts and reinitialise OpenGL ES state 
+                // and objects to continue rendering." 
+                destroyContext();
+                createContext();
+            }
+        }
     }
+
     Core::shutdown();
+
+    destroyContext();
+    eglDestroySurface(eglDisplay, eglSurface);
+    eglTerminate(eglDisplay);
 
     while (waitForConsoleToClose)
     {
@@ -243,43 +320,60 @@ void Main::ErrorExit(LPTSTR lpszFunction)
     ExitProcess(dw);
 }
 
-/**
- * Initialize for OpenGL.
- */
-void Main::initOpengl()
+void Main::checkEglError(const std::string & msg)
 {
-//	PIXELFORMATDESCRIPTOR pfd;
-//	int format;
-	
-//	deviceContext = GetDC(applicationWindowHandle);
-	
-
-/*
-	// set the pixel format for the DC
-	ZeroMemory(&pfd, sizeof(pfd));
-	pfd.nSize = sizeof(pfd);
-	pfd.nVersion = 1;
-	pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
-	pfd.iPixelType = PFD_TYPE_RGBA;
-	pfd.cColorBits = 24;
-	pfd.cDepthBits = 16;
-	pfd.iLayerType = PFD_MAIN_PLANE;
-	format = ChoosePixelFormat(deviceContext, &pfd);
-	SetPixelFormat(deviceContext, format, &pfd);
-	
-	renderContext = wglCreateContext(deviceContext);
-	wglMakeCurrent(deviceContext, renderContext); /// \todo Determine if we can make renderContext local to init()
-
-    const GLubyte * openglVersion = glGetString(GL_VERSION);
-    Graphics::checkOpenglError("Main::initOpengl glGetString Failed.");
-
-    const GLubyte * openglExtensions = glGetString(GL_EXTENSIONS);
-    Graphics::checkOpenglError("Main::initOpengl glGetString Failed.");
-
-    if (strstr((const char *)openglExtensions, "GL_ARB_ES2_compatibility") == NULL)
+    EGLint error = eglGetError();
+    if (error != EGL_SUCCESS)
     {
-        Platform::fatalError("Your OpenGL driver does not support GL_ARB_ES2_compatibility");
+        std::stringstream ss;
+        ss << msg << "\nEGL error code: " << error << std::endl;
+        Platform::fatalError(ss.str());
     }
-*/
-//    Opengl::init();
+}
+
+/**
+ * \brief Create a new context and make it current.
+ *
+ * This function is called at program start up and after power events.
+ */
+void Main::createContext()
+{  
+    assert(eglContext == EGL_NO_CONTEXT);
+    EGLint contextAttributes[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE, EGL_NONE };
+    eglContext = eglCreateContext(eglDisplay, frameBufferConfiguration, EGL_NO_CONTEXT, contextAttributes);
+    checkEglError("eglCreateContext");
+    if (eglContext == EGL_NO_CONTEXT)
+    {   
+        Platform::fatalError("eglCreateContext returned EGL_NO_CONTEXT");
+    }
+    eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext);
+    checkEglError("eglMakeCurrent");
+}
+
+/**
+ * \brief Destroy the context.
+ *
+ * This function is called after power events and at shutdown.
+ */
+void Main::destroyContext()
+{
+    assert(eglContext != EGL_NO_CONTEXT);
+
+    // Make sure the context is not current.
+    if (eglMakeCurrent(eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT) == EGL_FALSE)
+    {
+        EGLint error = eglGetError();
+        if (error == EGL_CONTEXT_LOST)
+        {
+            Platform::displayMessage("Power event when trying to initialize.  I don't know how to handle this.");
+            return;
+        }
+        Platform::fatalError("eglMakeCurrent failed in Graphics::initializeOpenglState.  Maybe this is normal when power events occur.");
+        return;
+    }
+
+    // Destroy the context.
+    eglDestroyContext(eglDisplay, eglContext);
+    checkEglError("eglDestroyContext");
+    eglContext = EGL_NO_CONTEXT;
 }

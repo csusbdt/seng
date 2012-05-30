@@ -13,11 +13,6 @@ class Core
 {
 public:
     /**
-     *
-     */
-//    typedef void (VoidFunction)();
-
-    /**
      * Subsystems will shut down when this is set to false.
      */
     static bool run;
@@ -45,7 +40,6 @@ public:
      * \param swapBuffers pointer to function in platform code that swaps the graphics buffers
      */
     static void init();
-//    static void init(VoidFunction * swapBuffers);
 
     /**
      * Called by platform code when no window messages are pending.
@@ -53,6 +47,8 @@ public:
      * \param elapsedSeconds seconds elapsed from program start.
      */
     static void onMessageQueueEmpty(double elapsedSeconds);
+
+    static void renderNextFrame();
 
     /**
      * Called by platform code when user closes application window.
