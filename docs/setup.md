@@ -25,14 +25,7 @@ Project Setup on Windows
 
 ### Running (debugging)
 
-- Set the working directory of the main project to the working folder.
-  To do this, add the following to the working directory field in the 
-  Debugging section of the project properties for the main project.
-  
-  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  \code
-  $(ProjectDir)\..\..\..\..\working
-  \endcode
-  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+- Set the working directory of the main project to the working folder. To do this, add the following to the working directory field in the Debugging section of the project properties for the main project.
 
-  
+    $(ProjectDir)\..\..\..\..\working
+

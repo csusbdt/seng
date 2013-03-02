@@ -25,11 +25,13 @@ void Core::init()
     luaL_openlibs(lua);
 
     // Register core function with Lua.
+    lua_register(lua, "create", Script::create);
+    lua_register(lua, "destroy", Script::destroy);
+    lua_register(lua, "help", Script::help);
+    lua_register(lua, "moveby", Script::moveby);
+    lua_register(lua, "moveto", Script::moveto);
     lua_register(lua, "quit", Script::quit);
     lua_register(lua, "setBackgroundColor", Script::setBackgroundColor);
-    lua_register(lua, "create", Script::create);
-    lua_register(lua, "move", Script::move);
-    lua_register(lua, "destroy", Script::destroy);
 
     // Restart garbage collector.
     lua_gc(lua, LUA_GCRESTART, 0);
