@@ -2,5 +2,6 @@ platforms/vs2010/Debug
 platforms/vs2010/ipch
 platforms/vs2010/lua/Debug
 platforms/vs2010/vs2010.suo
+platforms/vs2010/vs2010.sdf
 platforms/vs2010/win/Debug
 *.opensdf

@@ -16,6 +16,8 @@ public:
 
     static bool waitForConsoleToClose;
 
+	static EGLNativeWindowType eglNativeWindowType;
+
 private:
     /**
      * The application's graphical window handle.

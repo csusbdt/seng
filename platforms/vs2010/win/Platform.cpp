@@ -5,8 +5,6 @@
 unsigned int Platform::screenWidth = 300;
 unsigned int Platform::screenHeight = 300;
 
-EGLNativeWindowType Platform::eglNativeWindowType = 0;
-
 void Platform::displayMessage(const std::string & msg)
 {
     std::cout << msg << std::endl;
@@ -19,9 +17,4 @@ void Platform::fatalError(const std::string & msg)
 #endif
     displayMessage(msg);
     Core::run = false;
-}
-
-EGLDisplay Platform::getEglDisplay()
-{
-    return eglGetDisplay(Main::deviceContext);
 }

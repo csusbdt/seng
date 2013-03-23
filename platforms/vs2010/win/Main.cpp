@@ -39,6 +39,8 @@ double Main::timeCounterFrequency = 0;
 HDC Main::deviceContext;
 HGLRC Main::renderContext;
 bool Main::waitForConsoleToClose = false;
+EGLNativeWindowType Main::eglNativeWindowType = 0;
+
 
 EGLint Main::frameBufferAttributes[] = { 
     EGL_RED_SIZE, 4,
@@ -148,11 +150,10 @@ int Main::main(int argc, _TCHAR* argv[])
 #endif
 
     deviceContext = GetDC(applicationWindowHandle);
-    Platform::eglNativeWindowType = (EGLNativeWindowType) applicationWindowHandle;
-
+    eglNativeWindowType = (EGLNativeWindowType) applicationWindowHandle;
 
     // Get the display handle.
-    eglDisplay = Platform::getEglDisplay();
+	eglDisplay = eglGetDisplay(deviceContext);
     if (eglDisplay == EGL_NO_DISPLAY)
     {
         Platform::fatalError("No EGL Display.");
@@ -178,7 +179,7 @@ int Main::main(int argc, _TCHAR* argv[])
 
     // Create a window surface.
     EGLint surfaceAttributes[] = { EGL_RENDER_BUFFER, EGL_BACK_BUFFER, EGL_NONE, EGL_NONE };
-    eglSurface = eglCreateWindowSurface(eglDisplay, frameBufferConfiguration, Platform::eglNativeWindowType, surfaceAttributes);
+    eglSurface = eglCreateWindowSurface(eglDisplay, frameBufferConfiguration, eglNativeWindowType, surfaceAttributes);
     checkEglError("eglCreateWindowSurface");
     if (eglSurface == EGL_NO_SURFACE)
     {
