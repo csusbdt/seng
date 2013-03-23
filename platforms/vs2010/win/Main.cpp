@@ -151,7 +151,7 @@ int Main::main(int argc, _TCHAR* argv[])
     Platform::eglNativeWindowType = (EGLNativeWindowType) applicationWindowHandle;
 
 
-        // Get the display handle.
+    // Get the display handle.
     eglDisplay = Platform::getEglDisplay();
     if (eglDisplay == EGL_NO_DISPLAY)
     {
