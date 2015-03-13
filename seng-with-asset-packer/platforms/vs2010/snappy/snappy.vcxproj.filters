@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="..\..\..\src\snappy\snappy.cc" />
+    <ClCompile Include="..\..\..\src\snappy\snappy-sinksource.cc" />
+    <ClCompile Include="..\..\..\src\snappy\snappy-stubs-internal.cc" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\src\snappy\snappy.h" />
+    <ClInclude Include="..\..\..\src\snappy\snappy-stubs-public.h" />
+    <ClInclude Include="..\..\..\src\snappy\snappy-internal.h" />
+    <ClInclude Include="..\..\..\src\snappy\snappy-sinksource.h" />
+    <ClInclude Include="..\..\..\src\snappy\snappy-stubs-internal.h" />
+  </ItemGroup>
+</Project>
